@@ -32,6 +32,9 @@ type Config struct {
 		Host     string `yaml:"host"`
 		Port     uint16 `yaml:"port"`
 		ClientID string `yaml:"clientID"`
+		Topics   struct {
+			Uptime string `yaml:"uptime"`
+		} `yaml:"topics"`
 	} `yaml:"mqtt"`
 	Prom struct {
 		Http struct {
@@ -108,7 +111,7 @@ func main() {
 	crony := cron.New()
 	crony.AddFunc("* * * * *", func() {
 		fmt.Println("publishig up time...")
-		mqttClient.Publish("mqtt-prometheus-exporter/state/up", 0, false, fmt.Sprintf("%d", time.Now().Unix()))
+		mqttClient.Publish(config.Mqtt.Topics.Uptime, 0, false, fmt.Sprintf("%d", time.Now().Unix()))
 	})
 	crony.Start()
 
