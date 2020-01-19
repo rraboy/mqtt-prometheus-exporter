@@ -1,7 +1,7 @@
 mqtt:
-    host: localhost
-    port: 1883
+    url: tcp://localhost:1883
     clientID: mqtt-prometheus-exporter
+    exposeSys: true
     topics:
         uptime: mqtt-prometheus-exporter/state/uptime
 prom:

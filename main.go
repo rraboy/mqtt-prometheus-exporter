@@ -19,6 +19,12 @@ import (
 )
 
 var configFile = flag.String("config", "config.yml", "Configuration File")
+var brokerMetrics map[string]*prometheus.GaugeVec = make(map[string]*prometheus.GaugeVec)
+
+var brokerMetricsIgnore = []string{
+	"$SYS/broker/version",
+	"$SYS/broker/uptime",
+}
 
 type GaugeConfig struct {
 	MetricName string            `yaml:"metricName"`
@@ -29,10 +35,10 @@ type GaugeConfig struct {
 
 type Config struct {
 	Mqtt struct {
-		Host     string `yaml:"host"`
-		Port     uint16 `yaml:"port"`
-		ClientID string `yaml:"clientID"`
-		Topics   struct {
+		URL       string `yaml:"url"`
+		ClientID  string `yaml:"clientID"`
+		ExposeSys bool   `yaml:"exposeSys"`
+		Topics    struct {
 			Uptime string `yaml:"uptime"`
 		} `yaml:"topics"`
 	} `yaml:"mqtt"`
@@ -83,6 +89,48 @@ func buildGauge(gaugeConfig GaugeConfig, mqttClient mqtt.Client) {
 	}
 }
 
+func contains(arr []string, str string) bool {
+	for _, a := range arr {
+		if a == str {
+			return true
+		}
+	}
+	return false
+}
+
+func exposeMqttSys(mqttClient mqtt.Client, config Config) {
+	var handler mqtt.MessageHandler = func(client mqtt.Client, msg mqtt.Message) {
+		fmt.Printf("%s: %s\n", msg.Topic(), msg.Payload())
+		if contains(brokerMetricsIgnore, msg.Topic()) {
+			return
+		}
+
+		f, _ := strconv.ParseFloat(string(msg.Payload()), 64)
+		metricName := "mqtt_" + strings.ReplaceAll(strings.ReplaceAll(msg.Topic()[5:], "/", "_"), " ", "")
+		fmt.Printf("\t%s: %f\n", metricName, f)
+
+		if brokerGauge, ok := brokerMetrics[metricName]; ok {
+			brokerGauge.WithLabelValues(config.Mqtt.URL, config.Mqtt.ClientID).Set(f)
+		} else {
+			brokerGauge := prometheus.NewGaugeVec(
+				prometheus.GaugeOpts{
+					Name: metricName,
+					Help: "Help: None " + metricName,
+				},
+				[]string{"url", "clientID"},
+			)
+			brokerGauge.WithLabelValues(config.Mqtt.URL, config.Mqtt.ClientID).Set(f)
+			prometheus.MustRegister(brokerGauge)
+			brokerMetrics[metricName] = brokerGauge
+		}
+	}
+
+	if token := mqttClient.Subscribe("$SYS/#", 0, handler); token.Wait() && token.Error() != nil {
+		fmt.Println(token.Error())
+		os.Exit(1)
+	}
+}
+
 func main() {
 	flag.Parse()
 
@@ -99,7 +147,7 @@ func main() {
 
 	//mqtt.DEBUG = log.New(os.Stdout, "", 0)
 	mqtt.WARN = log.New(os.Stdout, "", 0)
-	opts := mqtt.NewClientOptions().AddBroker(fmt.Sprintf("tcp://%s:%d", config.Mqtt.Host, config.Mqtt.Port)).SetClientID(config.Mqtt.ClientID)
+	opts := mqtt.NewClientOptions().AddBroker(config.Mqtt.URL).SetClientID(config.Mqtt.ClientID)
 	opts.SetKeepAlive(10 * time.Second)
 	opts.SetPingTimeout(5 * time.Second)
 
@@ -117,6 +165,10 @@ func main() {
 
 	for _, gaugeConfig := range config.Prom.Gauges {
 		buildGauge(gaugeConfig, mqttClient)
+	}
+
+	if config.Mqtt.ExposeSys {
+		exposeMqttSys(mqttClient, config)
 	}
 
 	http.Handle("/metrics", promhttp.Handler())
