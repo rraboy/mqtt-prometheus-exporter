@@ -1,0 +1,15 @@
+mqtt:
+    host: localhost
+    port: 1883
+    clientID: mqtt-prometheus-exporter
+prom:
+    http:
+        addr: :9123
+    gauges:
+        - metricName: mqtt_values_temperature
+          mqttName: +/values/temperature
+          help: temperature
+          labels:
+            sensor: $0
+            static-label: temperature
+
