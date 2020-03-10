@@ -20,6 +20,7 @@ import (
 
 var configFile = flag.String("config", "config.yml", "Configuration File")
 var brokerMetrics map[string]*prometheus.GaugeVec = make(map[string]*prometheus.GaugeVec)
+var lastMetricsTick = time.Now()
 
 var brokerMetricsIgnore = []string{
 	"$SYS/broker/version",
@@ -79,6 +80,10 @@ func buildGauge(gaugeConfig GaugeConfig, mqttClient mqtt.Client) {
 			}
 		}
 		promGauge.With(prometheus.Labels(labels)).Set(f)
+		if time.Now().Sub(lastMetricsTick).Minutes() > 5 {
+			panic("been more than 5 mins and not receiving any more mqtt values. shutting down...")
+		}
+		lastMetricsTick = time.Now()
 	}
 
 	prometheus.MustRegister(promGauge)
