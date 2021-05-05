@@ -66,7 +66,7 @@ func buildGauge(gaugeConfig GaugeConfig, mqttClient mqtt.Client) {
 	)
 
 	var handler mqtt.MessageHandler = func(client mqtt.Client, msg mqtt.Message) {
-		fmt.Printf("%s: %s\n", msg.Topic(), msg.Payload())
+		log.Printf("%s: %s\n", msg.Topic(), msg.Payload())
 		f, _ := strconv.ParseFloat(string(msg.Payload()), 64)
 		topicKeys := strings.Split(msg.Topic(), "/")
 		labels := make(map[string]string)
@@ -89,7 +89,7 @@ func buildGauge(gaugeConfig GaugeConfig, mqttClient mqtt.Client) {
 	prometheus.MustRegister(promGauge)
 
 	if token := mqttClient.Subscribe(gaugeConfig.MqttName, 0, handler); token.Wait() && token.Error() != nil {
-		fmt.Println(token.Error())
+		log.Println(token.Error())
 		os.Exit(1)
 	}
 }
@@ -105,14 +105,14 @@ func contains(arr []string, str string) bool {
 
 func exposeMqttSys(mqttClient mqtt.Client, config Config) {
 	var handler mqtt.MessageHandler = func(client mqtt.Client, msg mqtt.Message) {
-		fmt.Printf("%s: %s\n", msg.Topic(), msg.Payload())
+		log.Printf("%s: %s\n", msg.Topic(), msg.Payload())
 		if contains(brokerMetricsIgnore, msg.Topic()) {
 			return
 		}
 
 		f, _ := strconv.ParseFloat(string(msg.Payload()), 64)
 		metricName := "mqtt_" + strings.ReplaceAll(strings.ReplaceAll(msg.Topic()[5:], "/", "_"), " ", "")
-		fmt.Printf("\t%s: %f\n", metricName, f)
+		log.Printf("\t%s: %f\n", metricName, f)
 
 		if brokerGauge, ok := brokerMetrics[metricName]; ok {
 			brokerGauge.WithLabelValues(config.Mqtt.URL, config.Mqtt.ClientID).Set(f)
@@ -131,7 +131,7 @@ func exposeMqttSys(mqttClient mqtt.Client, config Config) {
 	}
 
 	if token := mqttClient.Subscribe("$SYS/#", 0, handler); token.Wait() && token.Error() != nil {
-		fmt.Println(token.Error())
+		log.Println(token.Error())
 		os.Exit(1)
 	}
 }
@@ -150,7 +150,6 @@ func main() {
 		log.Fatalf("unable to parse '%s': %v", *configFile, err)
 	}
 
-	//mqtt.DEBUG = log.New(os.Stdout, "", 0)
 	mqtt.WARN = log.New(os.Stdout, "", 0)
 	opts := mqtt.NewClientOptions().AddBroker(config.Mqtt.URL).SetClientID(config.Mqtt.ClientID)
 	opts.SetKeepAlive(10 * time.Second)
