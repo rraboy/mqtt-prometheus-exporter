@@ -105,17 +105,17 @@ func contains(arr []string, str string) bool {
 
 func exposeMqttSys(mqttClient mqtt.Client, config Config) {
 	var handler mqtt.MessageHandler = func(client mqtt.Client, msg mqtt.Message) {
-		if !strings.Contains(msg.Topic(), "SYS") {
-			log.Printf("%s: %s\n", msg.Topic(), msg.Payload())
-		}
-
 		if contains(brokerMetricsIgnore, msg.Topic()) {
 			return
 		}
 
 		f, _ := strconv.ParseFloat(string(msg.Payload()), 64)
 		metricName := "mqtt_" + strings.ReplaceAll(strings.ReplaceAll(msg.Topic()[5:], "/", "_"), " ", "")
-		log.Printf("\t%s: %f\n", metricName, f)
+
+		if !strings.Contains(msg.Topic(), "broker") {
+			log.Printf("%s: %s\n", msg.Topic(), msg.Payload())
+			log.Printf("\t%s: %f\n", metricName, f)
+		}
 
 		if brokerGauge, ok := brokerMetrics[metricName]; ok {
 			brokerGauge.WithLabelValues(config.Mqtt.URL, config.Mqtt.ClientID).Set(f)
