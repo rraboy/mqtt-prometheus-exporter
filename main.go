@@ -105,7 +105,10 @@ func contains(arr []string, str string) bool {
 
 func exposeMqttSys(mqttClient mqtt.Client, config Config) {
 	var handler mqtt.MessageHandler = func(client mqtt.Client, msg mqtt.Message) {
-		log.Printf("%s: %s\n", msg.Topic(), msg.Payload())
+		if !strings.Contains(msg.Topic(), "SYS") {
+			log.Printf("%s: %s\n", msg.Topic(), msg.Payload())
+		}
+
 		if contains(brokerMetricsIgnore, msg.Topic()) {
 			return
 		}
@@ -131,6 +134,7 @@ func exposeMqttSys(mqttClient mqtt.Client, config Config) {
 	}
 
 	if token := mqttClient.Subscribe("$SYS/#", 0, handler); token.Wait() && token.Error() != nil {
+		log.Println("Unable to subscribe to $sys")
 		log.Println(token.Error())
 		os.Exit(1)
 	}
@@ -151,9 +155,15 @@ func main() {
 	}
 
 	mqtt.WARN = log.New(os.Stdout, "", 0)
-	opts := mqtt.NewClientOptions().AddBroker(config.Mqtt.URL).SetClientID(config.Mqtt.ClientID)
-	opts.SetKeepAlive(10 * time.Second)
-	opts.SetPingTimeout(5 * time.Second)
+	opts := mqtt.NewClientOptions().
+		AddBroker(config.Mqtt.URL).
+		SetClientID(config.Mqtt.ClientID).
+		SetKeepAlive(5 * time.Second).
+		SetPingTimeout(2 * time.Second).
+		SetWriteTimeout(2 * time.Second).
+		SetConnectTimeout(2 * time.Second).
+		SetAutoReconnect(true).
+		SetResumeSubs(true)
 
 	mqttClient := mqtt.NewClient(opts)
 	if token := mqttClient.Connect(); token.Wait() && token.Error() != nil {
