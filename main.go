@@ -80,9 +80,6 @@ func buildGauge(gaugeConfig GaugeConfig, mqttClient mqtt.Client) {
 			}
 		}
 		promGauge.With(prometheus.Labels(labels)).Set(f)
-		if time.Now().Sub(lastMetricsTick).Minutes() > 5 {
-			panic("been more than 5 mins and not receiving any more mqtt values. shutting down...")
-		}
 		lastMetricsTick = time.Now()
 	}
 
@@ -174,6 +171,11 @@ func main() {
 	crony.AddFunc("* * * * *", func() {
 		fmt.Println("publishig up time...")
 		mqttClient.Publish(config.Mqtt.Topics.Uptime, 0, false, fmt.Sprintf("%d", time.Now().Unix()))
+	})
+	crony.AddFunc("* * * * *", func() {
+		if time.Now().Sub(lastMetricsTick).Minutes() > 1 {
+			panic("been more than 5 mins and not receiving any more mqtt values. shutting down...")
+		}
 	})
 	crony.Start()
 
